@@ -1,0 +1,162 @@
+mql5
+//+------------------------------------------------------------------+
+//|                                                       KT Volume Profile MT4                      |
+//|                                                      forexroboteasy.com                      |
+//|                                                  Forex Robot Easy Team                   |
+//+------------------------------------------------------------------+
+#property indicator_chart_window
+#property indicator_buffers 2
+#property indicator_color1 LimeGreen
+#property indicator_color2 Red
+
+//--- input parameters
+input int period = 1440; // Time period in minutes
+input int rectangle_width = 10; // Rectangle width in pips
+
+//--- buffers
+double UpBuffer[];
+double DownBuffer[];
+
+//--- global variables
+object rectangle;
+double poc_price;
+bool is_poc_updated;
+
+//--- initialization function
+int OnInit()
+{
+    //--- create rectangle object
+    rectangle = ObjectCreate('VolumeProfileRectangle', OBJ_RECTANGLE, 0, Time[0], High[0], Time[0] + period * 60, Low[0]);
+    ObjectSet(rectangle, OBJPROP_COLOR, clrBlue);
+    ObjectSet(rectangle, OBJPROP_BACK, true);
+    
+    return(INIT_SUCCEEDED);
+}
+
+//--- deinitialization function
+void OnDeinit(const int reason)
+{
+    //--- remove rectangle object
+    ObjectDelete(rectangle);
+}
+
+//--- calculation function
+int OnCalculate(const int rates_total,
+                const int prev_calculated,
+                const datetime &time[],
+                const double &open[],
+                const double &high[],
+                const double &low[],
+                const double &close[],
+                const long &tick_volume[],
+                const long &volume[],
+                const int &spread[])
+{
+    //--- reset buffers
+    ArraySetAsSeries(UpBuffer, true);
+    ArraySetAsSeries(DownBuffer, true);
+    
+    //--- get rectangle coordinates
+    double rect_top = ObjectGet(rectangle, OBJPROP_PRICE1);
+    double rect_bottom = ObjectGet(rectangle, OBJPROP_PRICE2);
+    
+    //--- calculate volume profile
+    int start_bar = Bars - prev_calculated - 1;
+    for (int i = start_bar; i >= 0; i--)
+    {
+        double price = close[i];
+        double volume = tick_volume[i];
+        
+        if (price >= rect_bottom && price < rect_top)
+        {
+            if (price > poc_price)
+                UpBuffer[i] += volume;
+            else
+                DownBuffer[i] += volume;
+        }
+    }
+    
+    //--- calculate POC
+    double max_volume = 0;
+    int poc_bar = 0;
+    
+    for (int i = start_bar; i >= 0; i--)
+    {
+        double price = close[i];
+        double volume = tick_volume[i];
+        
+        if (price >= rect_bottom && price < rect_top)
+        {
+            if (UpBuffer[i] + DownBuffer[i] > max_volume)
+            {
+                max_volume = UpBuffer[i] + DownBuffer[i];
+                poc_bar = i;
+            }
+        }
+    }
+    
+    //--- update POC price
+    if (poc_bar != 0 && poc_price != close[poc_bar])
+    {
+        poc_price = close[poc_bar];
+        is_poc_updated = true;
+    }
+    
+    //--- check if POC was updated
+    if (is_poc_updated)
+    {
+        //--- display POC on the chart
+        string poc_label = 'POC: ' + DoubleToString(poc_price, Digits);
+        ObjectCreate('POCLabel', OBJ_LABEL, 0, Time[poc_bar], poc_price, 0);
+        ObjectSetText('POCLabel', poc_label, 10, 'Arial', Yellow);
+        ObjectSet('POCLabel', OBJPROP_CORNER, CORNER_LEFT_LOWER);
+        
+        //--- set flag to false
+        is_poc_updated = false;
+    }
+    
+    //--- return calculated bars
+    return(rates_total);
+}
+
+//--- drag and drop functionality
+void OnChartEvent(const int id,
+                  const long &lparam,
+                  const double &dparam,
+                  const string &sparam)
+{
+    if (id == CHARTEVENT_OBJECT_DRAG && sparam == 'VolumeProfileRectangle')
+    {
+        //--- update rectangle coordinates
+        double rect_top = ObjectGet(rectangle, OBJPROP_PRICE1);
+        double rect_bottom = ObjectGet(rectangle, OBJPROP_PRICE2);
+        
+        //--- check if rectangle coordinates have changed
+        if (rect_top != dparam || rect_bottom != lparam)
+        {
+            ObjectMove(rectangle, 0, Time[0], dparam, Time[0] + period * 60, lparam);
+            
+            //--- set flag to true for POC update
+            is_poc_updated = true;
+        }
+    }
+}
+
+//--- trading functions
+void PlaceTrade(double price, double volume)
+{
+    //--- place trade based on volume profile analysis
+    //--- code for placing trade goes here
+}
+
+void SetStopLoss(double price)
+{
+    //--- set stop-loss level based on volume profile analysis
+    //--- code for setting stop-loss goes here
+}
+
+void SetTakeProfit(double price)
+{
+    //--- set take-profit level based on volume profile analysis
+    //--- code for setting take-profit goes here
+}
